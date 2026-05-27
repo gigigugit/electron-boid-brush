@@ -32,6 +32,35 @@ Boid Brush is a personal project for learning about brush behavior, experimentin
 
 ## Usage
 
+### Desktop App (Windows 11 — Electron)
+
+Run Boid Brush as a native Windows 11 desktop application:
+
+```bash
+# Install dependencies (first time only)
+npm install
+
+# Launch the app
+npm start
+```
+
+To build a distributable Windows installer or portable `.exe`:
+
+```bash
+npm run build:win
+```
+
+Output is placed in the `dist/` folder. Two targets are produced:
+- **NSIS installer** — a standard Windows setup wizard (recommended)
+- **Portable** — a single `.exe` that runs without installation
+
+#### Requirements
+- Node.js 18 or later
+- Windows 10 / 11 (x64)
+- A GPU with DirectX 12 support (for WebGPU acceleration)
+
+### Browser
+
 Open `app.html` in a modern browser (or `index.html` for the landing page with links to forks). Works on desktop and tablet (iPad) — no server or build step required.
 
 ### Keyboard Shortcuts
