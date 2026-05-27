@@ -16,6 +16,23 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const fs = require('fs');
 
+const APP_ROOT = path.resolve(__dirname);
+const CONTENT_TYPES = new Map([
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.mjs', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.css', 'text/css; charset=utf-8'],
+  ['.wasm', 'application/wasm'],
+  ['.svg', 'image/svg+xml'],
+  ['.png', 'image/png'],
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.gif', 'image/gif'],
+  ['.webp', 'image/webp'],
+  ['.ico', 'image/x-icon'],
+]);
+
 // ---------------------------------------------------------------------------
 // WebGPU — must be set before app ready
 // ---------------------------------------------------------------------------
@@ -98,10 +115,35 @@ app.whenReady().then(() => {
   // Serve local files via the `app://` custom protocol.
   // All requests to `app://localhost/<pathname>` are mapped to the
   // corresponding file in __dirname.
-  protocol.handle('app', (request) => {
+  protocol.handle('app', async (request) => {
     const { pathname } = new URL(request.url);
-    const filePath = path.join(__dirname, decodeURIComponent(pathname));
-    return net.fetch(pathToFileURL(filePath).toString());
+    const relativePath = decodeURIComponent(pathname || '/')
+      .replace(/^[/\\]+/, '') || 'app.html';
+    const filePath = path.resolve(APP_ROOT, relativePath);
+
+    if (filePath !== APP_ROOT && !filePath.startsWith(`${APP_ROOT}${path.sep}`)) {
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    try {
+      const stats = await fs.promises.stat(filePath);
+      if (!stats.isFile()) {
+        return new Response('Not Found', { status: 404 });
+      }
+    } catch {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    const response = await net.fetch(pathToFileURL(filePath).toString());
+    const headers = new Headers(response.headers);
+    const contentType = CONTENT_TYPES.get(path.extname(filePath).toLowerCase());
+    if (contentType) headers.set('content-type', contentType);
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   });
 
   // IPC: native Save As dialog + file write
