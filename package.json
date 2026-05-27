@@ -1,0 +1,59 @@
+{
+  "name": "boid-brush",
+  "version": "1.0.0",
+  "description": "Boid Brush — a boid-flocking painting application for Windows 11",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.gigigugit.boidbrush",
+    "productName": "Boid Brush",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "circle.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "app.html",
+      "app.js",
+      "ui.js",
+      "brushes.js",
+      "compositor.js",
+      "selection.js",
+      "ai-server.js",
+      "psd-io.js",
+      "wasm-bridge.js",
+      "webgpu-boid-sim.js",
+      "webgpu-fluid-sim.js",
+      "fluid-renderer.js",
+      "boid-renderer.js",
+      "blob-stroke.js",
+      "circle.png",
+      "main.js",
+      "preload.js",
+      "wasm-sim/pkg/**/*"
+    ]
+  }
+}

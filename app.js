@@ -11963,7 +11963,7 @@ export class App {
   saveImage() {
     const canvas = this._compositeFlatCanvas();
     // Use toBlob for better performance with large canvases
-    canvas.toBlob(blob => {
+    canvas.toBlob(async blob => {
       if (!blob) {
         // Fallback to toDataURL
         const a = document.createElement('a');
@@ -11971,6 +11971,13 @@ export class App {
         a.href = canvas.toDataURL('image/png');
         a.click();
         this.showToast('💾 Saved');
+        return;
+      }
+      // When running in Electron, use the native Save As dialog
+      if (window.electronAPI?.isElectron) {
+        const buffer = new Uint8Array(await blob.arrayBuffer());
+        const result = await window.electronAPI.saveFile(buffer, 'boid-brush.png');
+        if (result.ok) this.showToast('💾 Saved');
         return;
       }
       const url = URL.createObjectURL(blob);
