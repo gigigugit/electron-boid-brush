@@ -2,7 +2,8 @@
 // ui.js — Sidebar UI: collapsible sections, sliders, presets, layers
 // =============================================================================
 
-const PRESETS_KEY = 'bb_presets_v1';
+export const PRESETS_KEY = 'bb_presets_v1';
+export const AUTOSAVE_STORAGE_KEY = 'bb_autosave';
 const AUTOSAVE_DEBOUNCE_MS = 2000;
 const MAX_SWARM_COUNT = 2000;
 const NUDGE_BUTTON_STYLE = 'width:20px;height:20px;padding:0;border-radius:5px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:#ddd;font-size:12px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;';
@@ -95,6 +96,39 @@ function _nudgeRangeValue(target, delta) {
   _updateSliderValue(target, (Number(target?.value) || 0) + delta);
 }
 
+export function renderSimulationSessionCard({
+  title = 'Simulation Session',
+  badgeId = '',
+  badgeTone = 'muted',
+  badgeLabel = 'Unsaved Draft',
+  sessionSelectMarkup = '',
+  actionsMarkup = '',
+  sessionNameId = '',
+  sessionName = '',
+  sessionMetaId = '',
+  sessionMeta = '',
+} = {}) {
+  const badgeIdAttr = badgeId ? ` id="${badgeId}"` : '';
+  const sessionNameIdAttr = sessionNameId ? ` id="${sessionNameId}"` : '';
+  const sessionMetaIdAttr = sessionMetaId ? ` id="${sessionMetaId}"` : '';
+  return `
+    <div class="sim-inspector-sessionBarCard">
+      <div class="sim-inspector-title">${title}</div>
+      <div class="sim-inspector-sessionBarRow">
+        <span class="sim-inspector-sessionBarLabel">Editing Session</span>
+        <span${badgeIdAttr} class="sim-stage-badge ${badgeTone}">${badgeLabel}</span>
+      </div>
+      <div class="sim-inspector-sessionBarControls">
+        ${sessionSelectMarkup}
+        <div class="sim-inspector-sessionBarActions">
+          ${actionsMarkup}
+        </div>
+      </div>
+      <div${sessionNameIdAttr} class="sim-session-context-title">${sessionName}</div>
+      <div${sessionMetaIdAttr} class="sim-session-context-meta">${sessionMeta}</div>
+    </div>`;
+}
+
 export const LEADER_OVERRIDE_FIELDS = Object.freeze([
   { key: 'seek', sourceId: 'seek', id: 'leaderSeek', overrideId: 'leaderOverrideSeek', type: 'range', label: 'Seek', min: 0, max: 100, defaultValue: 75, readControl: ({ val }) => val('leaderSeek') / 100 },
   { key: 'cohesion', sourceId: 'cohesion', id: 'leaderCohesion', overrideId: 'leaderOverrideCohesion', type: 'range', label: 'Cohesion', min: 0, max: 100, defaultValue: 37, readControl: ({ val }) => val('leaderCohesion') / 100 },
@@ -179,6 +213,30 @@ function _syncLeaderOverrideUI() {
 export function buildSidebar(app) {
   const sb = document.getElementById('sidebar');
   sb.innerHTML = `
+    <div id="simBrushSessionCardHost" data-brushes="boid">
+      ${renderSimulationSessionCard({
+        badgeId: 'simSidebarSessionBadge',
+        badgeTone: 'muted',
+        badgeLabel: 'Unsaved Draft',
+        sessionSelectMarkup: `
+          <label class="sim-session-switcher">
+            <span>Session Selector</span>
+            <select id="simSidebarSessionSelect" class="sim-stage-select" disabled>
+              <option value="" disabled selected>Unsaved Draft</option>
+            </select>
+          </label>`,
+        actionsMarkup: `
+          <button id="simSidebarNewDraft" type="button">New Draft</button>
+          <button id="simSidebarSave" type="button">Save Draft Session</button>
+          <button id="btnOpenSimulationSetup" type="button">Stage Setup</button>
+          <button id="btnOpenSimulationInspector" type="button">Session Editor</button>`,
+        sessionNameId: 'simSidebarSessionName',
+        sessionName: 'Simulation session: Unsaved Draft',
+        sessionMetaId: 'simSidebarSessionMeta',
+        sessionMeta: 'Brush sidebar changes can be captured into the current simulation draft or saved session.',
+      })}
+    </div>
+
     <!-- Color History -->
     <div class="section-header" data-section="colorHistory">Colors <span class="chevron">▼</span></div>
     <div class="section-body">
@@ -552,6 +610,8 @@ export function buildSidebar(app) {
     <div class="section-header closed" data-brushes="boid ant bristle simple eraser motionPath" data-section="stampImage">Stamp Image <span class="chevron">▼</span></div>
     <div class="section-body collapsed" data-brushes="boid ant bristle simple eraser motionPath">
       <label>Enable <input type="checkbox" id="stampImageEnabled"></label>
+      <div id="stampPresetSwitcher"></div>
+      <span class="slider-desc">Built-in free silhouettes for quick switching. Upload still works for custom stamps.</span>
       <div style="display:flex;gap:8px;align-items:flex-start;margin:6px 0;">
         <canvas id="stampImagePreview" width="72" height="72" style="width:72px;height:72px;border-radius:6px;border:1px solid rgba(255,255,255,0.12);background:#0d0d12;image-rendering:auto;"></canvas>
         <div style="display:flex;flex-direction:column;gap:4px;min-width:0;flex:1;">
@@ -560,11 +620,11 @@ export function buildSidebar(app) {
         </div>
       </div>
       <div style="display:flex;gap:4px;align-items:center;margin:4px 0;">
-        <button id="btnUploadStampImage" style="flex:1;">📂 Load Stamp</button>
+        <button id="btnUploadStampImage" style="flex:1;">📂 Upload Stamp</button>
         <button id="btnClearStampImage" style="flex-shrink:0;">✕</button>
       </div>
       <label>Tint With Brush <input type="checkbox" id="stampImageTint" checked></label>
-      ${sliderRow('stampImageRotation', 'Rotation', 0, 360, 0, v => v + '°', 'Rotate the uploaded stamp while preserving its aspect ratio and soft alpha')}
+      ${sliderRow('stampImageRotation', 'Rotation', 0, 360, 0, v => v + '°', 'Rotate the loaded stamp while preserving its aspect ratio and soft alpha')}
     </div>
 
     <!-- Canvas Texture -->
@@ -617,15 +677,20 @@ export function buildSidebar(app) {
     </div>
 
     <!-- Sensing (boid + ant) -->
-    <div class="section-header" data-brushes="boid ant" data-section="sensing">Pixel Sensing <span class="chevron">▼</span></div>
-    <div class="section-body" data-brushes="boid ant">
+    <div class="section-header" data-brushes="boid ant" data-section="sensing">Drawing Mode Pixel Sensing <span class="chevron">▼</span></div>
+    <div class="section-body" data-brushes="boid ant" data-section="sensing">
       <label>Enable <input type="checkbox" id="sensingEnabled"></label>
       <label>Mode <select id="sensingMode"><option value="avoid">Avoid</option><option value="attract">Attract</option></select></label>
       <label>Channel <select id="sensingChannel"><option value="darkness">Darkness</option><option value="lightness">Lightness</option><option value="saturation">Saturation</option><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option><option value="alpha">Alpha</option></select></label>
       ${sliderRow('sensingStrength', 'Strength', 0, 100, 50, v => (v/100).toFixed(2))}
       ${sliderRow('sensingRadius', 'Radius', 5, 80, 20)}
       ${sliderRow('sensingThreshold', 'Threshold', 0, 100, 10, v => (v/100).toFixed(2))}
-      <label>Source <select id="sensingSource"><option value="below">Below</option><option value="all">All</option><option value="active">Active</option></select></label>
+      ${sliderRow('sensingUpdateFrames', 'Update Every', 1, 50, 30, v => `${Math.round(v)}f`, 'Frames between sensing refreshes for Active and All sources')}
+      <label>Source <select id="sensingSource"><option value="below">Below</option><option value="all">All</option><option value="active">Active</option><option value="selected">Selected Layers</option></select></label>
+      <div style="display:flex;gap:6px;align-items:flex-start;">
+        <button id="sensingSourceLayersBtn" type="button" style="flex:0 0 auto;padding:6px 10px;background:rgba(58,106,232,0.18);border:1px solid rgba(58,106,232,0.3);border-radius:6px;color:#dce6ff;font-size:11px;cursor:pointer;">Pick Layers</button>
+        <span id="sensingSourceLayersSummary" class="slider-desc" style="margin:0;flex:1;min-width:0;">Custom: No custom sources selected</span>
+      </div>
     </div>
 
     <!-- Visual (boid + ant) -->
@@ -690,6 +755,7 @@ export function buildSidebar(app) {
     <!-- Settings -->
     <div class="section-header" data-section="settings">Settings <span class="chevron">▼</span></div>
     <div class="section-body">
+      <label>Always show tabs <input type="checkbox" id="alwaysShowTabs"></label>
       <label>Auto-save session <input type="checkbox" id="autoSaveSession"></label>
       <label>Perf telemetry <input type="checkbox" id="perfTelemetryEnabled"></label>
       <label>Request wake lock <input type="checkbox" id="perfWakeLockEnabled"></label>
@@ -699,13 +765,20 @@ export function buildSidebar(app) {
         <button id="btnCopyPerfTelemetry">📋 Copy Perf</button>
         <button id="btnResetPerfTelemetry">♻ Reset Perf</button>
       </div>
+      <div style="display:flex;gap:3px;margin:2px 0 4px;">
+        <button id="btnImportWorkspace">📥 Import Workspace</button>
+        <button id="btnExportWorkspace">📤 Export Workspace</button>
+      </div>
       <div style="display:flex;flex-direction:column;gap:3px;margin:4px 0;">
         <button id="btnSaveSession" class="save-btn">💾 Save Session</button>
         <button id="btnResetDefaults" class="reset-btn">🧼 Fresh Start</button>
       </div>
     </div>
     <div id="simControlStore" style="display:none" aria-hidden="true">
+      <label>Ephemeral Mode <input type="checkbox" id="simEphemeralMode"></label>
       <label>Speed <span id="v_simSpeed">1.0×</span><input type="range" id="simSpeed" min="10" max="300" value="100"></label>
+      ${sliderRow('simEphemeralFrames', 'Trail Length', 1, 240, 45, v => `${Math.round(v)}f`)}
+      ${sliderRow('simEphemeralFade', 'Fade Speed', 10, 300, 100, v => (v / 100).toFixed(2))}
       ${sliderRow('simPointStrength', 'Point Force', 0, 200, 90, v => (v/100).toFixed(2))}
       ${sliderRow('simPointRadius', 'Point Radius', 10, 300, 120)}
       ${sliderRow('simBoundsMargin', 'Bounds Margin', 0, 240, 0, v => `${v}px`)}
@@ -788,6 +861,18 @@ export function buildSidebar(app) {
     el.addEventListener('change', () => app.invalidateParams());
   });
 
+  const sensingSourceSelect = document.getElementById('sensingSource');
+  if (sensingSourceSelect) {
+    sensingSourceSelect.dataset.prevValue = sensingSourceSelect.value || 'below';
+    sensingSourceSelect.addEventListener('change', () => {
+      const previousValue = sensingSourceSelect.dataset.prevValue || 'below';
+      app._handleSensingSourceChange?.(sensingSourceSelect.value, previousValue);
+    });
+  }
+  document.getElementById('sensingSourceLayersBtn')?.addEventListener('click', event => {
+    app.toggleSensingSourcePicker?.(event.currentTarget);
+  });
+
   LEADER_OVERRIDE_FIELDS.forEach(field => {
     document.getElementById(field.overrideId)?.addEventListener('change', (event) => {
       if (event.target.checked) _copyLeaderOverrideFromSource(field);
@@ -860,6 +945,12 @@ export function buildSidebar(app) {
     app.clearCustomStampImage();
     syncStampImageUI(app);
   });
+  document.getElementById('stampPresetSwitcher')?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-stamp-preset-id]');
+    if (!button) return;
+    await app.loadBuiltinStampPreset(button.dataset.stampPresetId);
+    syncStampImageUI(app);
+  });
 
   // ── Preset buttons ──
   _renderBuiltinPresets(app);
@@ -868,9 +959,54 @@ export function buildSidebar(app) {
   document.getElementById('btnImportPreset')?.addEventListener('click', () => _importPreset(app));
   document.getElementById('btnExportPresets')?.addEventListener('click', () => _exportPresets(app));
 
+  const workspaceImportInput = document.createElement('input');
+  workspaceImportInput.type = 'file';
+  workspaceImportInput.accept = '.json,application/json';
+  workspaceImportInput.addEventListener('change', async () => {
+    const file = workspaceImportInput.files?.[0];
+    workspaceImportInput.value = '';
+    if (!file) return;
+    try {
+      await app.importWorkspaceSettingsText(await file.text());
+      _renderUserPresets(app);
+      syncUI(app);
+      app.showToast(`📥 Imported workspace from ${file.name}`);
+    } catch (error) {
+      console.error('Workspace settings import failed:', error);
+      app.showToast('⚠ Invalid workspace file');
+    }
+  });
+
   // Settings
   document.getElementById('btnSaveSession')?.addEventListener('click', () => {
     app.saveSession(); app.showToast('💾 Session saved');
+  });
+  document.getElementById('btnOpenSimulationInspector')?.addEventListener('click', () => {
+    if (!app.simulation.enabled) app._toggleSimulationMode(true);
+    app.simulation.inspectorCollapsed = false;
+    app._syncSimulationUI?.();
+  });
+  document.getElementById('simSidebarSessionSelect')?.addEventListener('change', event => {
+    const nextIndex = Number(event.target.value);
+    if (!Number.isFinite(nextIndex)) return;
+    app._syncActiveSimulationSessionFromDraft?.();
+    app._setActiveSimulationSessionIndex?.(nextIndex);
+  });
+  document.getElementById('simSidebarNewDraft')?.addEventListener('click', () => {
+    app._newSimulationSession?.();
+  });
+  document.getElementById('simSidebarSave')?.addEventListener('click', () => {
+    app._saveSimulationSession?.();
+  });
+  document.getElementById('btnOpenSimulationSetup')?.addEventListener('click', event => {
+    app._showSimulationSetupExplorer?.(event.currentTarget);
+  });
+  document.getElementById('btnImportWorkspace')?.addEventListener('click', () => {
+    if (!confirm('Import workspace settings from a file and replace the current saved workspace settings?')) return;
+    workspaceImportInput.click();
+  });
+  document.getElementById('btnExportWorkspace')?.addEventListener('click', () => {
+    app.exportWorkspaceSettingsFile();
   });
   document.getElementById('perfTelemetryEnabled')?.addEventListener('change', e => {
     app.setPerformanceTelemetryEnabled(e.target.checked);
@@ -892,9 +1028,9 @@ export function buildSidebar(app) {
   // Auto-save toggle
   const autoSaveCb = document.getElementById('autoSaveSession');
   if (autoSaveCb) {
-    autoSaveCb.checked = localStorage.getItem('bb_autosave') === '1';
+    autoSaveCb.checked = localStorage.getItem(AUTOSAVE_STORAGE_KEY) === '1';
     autoSaveCb.addEventListener('change', () => {
-      localStorage.setItem('bb_autosave', autoSaveCb.checked ? '1' : '0');
+      localStorage.setItem(AUTOSAVE_STORAGE_KEY, autoSaveCb.checked ? '1' : '0');
       app.showToast(autoSaveCb.checked ? '⏱ Auto-save enabled' : 'Auto-save disabled');
     });
     // Debounced auto-save: save session when params change
@@ -909,7 +1045,13 @@ export function buildSidebar(app) {
       el.addEventListener('change', triggerAutoSave);
     });
   }
+  sb.querySelectorAll('input[type="range"], input[type="checkbox"], select, input[type="number"]').forEach(el => {
+    el.addEventListener('input', () => app._syncActiveSimulationSessionFromDraft?.());
+    el.addEventListener('change', () => app._syncActiveSimulationSessionFromDraft?.());
+  });
   app._refreshPerformanceTelemetryUI(true);
+  app._refreshSensingLayerSourceUi?.();
+  app._syncSimulationSessionContextUi?.();
 
   // Initial brush-specific visibility
   app._toggleBrushSections(app.activeBrush);
@@ -1181,6 +1323,7 @@ export function syncUI(app) {
   syncStampImageUI(app);
   syncEdgeSliders(app);
   _syncLeaderOverrideUI();
+  app._refreshSensingLayerSourceUi?.();
   app._syncMotionPathUI?.();
 }
 
@@ -1220,13 +1363,18 @@ export function syncTextureUI(app) {
 
 export function syncStampImageUI(app) {
   const meta = app.getCustomStampImageMeta();
+  _renderStampPresetSwitcher(app, meta);
   const nameEl = document.getElementById('stampImageName');
   if (nameEl) nameEl.textContent = meta?.name || 'No stamp loaded';
   const infoEl = document.getElementById('stampImageFileName');
   if (infoEl) {
-    infoEl.textContent = meta
-      ? `Custom upload · ${meta.width}×${meta.height}`
-      : 'Upload a PNG, WebP, JPEG, or similar image';
+    if (!meta) infoEl.textContent = 'Choose a built-in preset or upload a PNG, WebP, JPEG, or similar image';
+    else {
+      const kind = meta.sourceType === 'builtin'
+        ? (meta.licenseLabel ? `Built-in preset · ${meta.licenseLabel}` : 'Built-in preset')
+        : 'Custom upload';
+      infoEl.textContent = `${kind} · ${meta.width}×${meta.height}`;
+    }
   }
   const enableEl = document.getElementById('stampImageEnabled');
   if (enableEl) {
@@ -1248,6 +1396,30 @@ export function syncStampImageUI(app) {
       const drawH = aspect >= 1 ? preview.height / aspect : preview.height;
       ctx.drawImage(meta.canvas, (preview.width - drawW) / 2, (preview.height - drawH) / 2, drawW, drawH);
     }
+  }
+}
+
+function _renderStampPresetSwitcher(app, activeMeta = app.getCustomStampImageMeta()) {
+  const container = document.getElementById('stampPresetSwitcher');
+  if (!container) return;
+  const activePresetId = activeMeta?.sourceType === 'builtin' ? activeMeta.id : '';
+  container.innerHTML = '';
+  for (const preset of app.getAvailableStampImagePresets()) {
+    const btn = document.createElement('button');
+    const isActive = preset.id === activePresetId;
+    btn.type = 'button';
+    btn.className = `stamp-preset-btn${isActive ? ' active' : ''}`;
+    btn.dataset.stampPresetId = preset.id;
+    btn.title = preset.licenseLabel ? `${preset.name} · ${preset.licenseLabel}` : preset.name;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    const img = document.createElement('img');
+    img.src = preset.previewDataUrl;
+    img.alt = `${preset.name} stamp preset`;
+    const label = document.createElement('span');
+    label.textContent = preset.name;
+    btn.appendChild(img);
+    btn.appendChild(label);
+    container.appendChild(btn);
   }
 }
 
@@ -1345,6 +1517,7 @@ const _sliderFormats = {
   taperCurve: v => (v / 100).toFixed(1),
   sensingStrength: v => (v / 100).toFixed(2),
   sensingThreshold: v => (v / 100).toFixed(2),
+  sensingUpdateFrames: v => `${Math.round(v)}f`,
   symmetryCenterX: v => v + '%',
   symmetryCenterY: v => v + '%',
   bristleSpread: v => (v / 100).toFixed(2),
@@ -1371,6 +1544,8 @@ const _sliderFormats = {
   antPheromoneDecay: v => (v / 1000).toFixed(3),
   simBoundsMargin: v => `${v}px`,
   simSpeed: v => (v / 100).toFixed(1) + '×',
+  simEphemeralFrames: v => `${Math.round(v)}f`,
+  simEphemeralFade: v => (v / 100).toFixed(2),
   simPointStrength: v => (v / 100).toFixed(2),
   simPathSpeed: v => `${v}px/s`,
   simEdgeForce: v => (v / 100).toFixed(2),
@@ -1552,6 +1727,7 @@ function _renderLayerList(app) {
     app.compositeAllLayers();
     _refreshLayers(app);
   };
+  app._refreshSensingLayerSourceUi?.();
 }
 
 // ── Drop indicator helpers ──────────────────────────────────
@@ -1629,8 +1805,8 @@ function _renderUserPresets(app) {
 function _applyPreset(app, values) {
   for (const [id, val] of Object.entries(values)) {
     // Handle special preset keys
-    if (id === '_primaryColor') { app.primaryEl.value = val; continue; }
-    if (id === '_secondaryColor') { app.secondaryEl.value = val; continue; }
+    if (id === '_primaryColor') { app.setColorValue?.('primary', val) ?? (app.primaryEl.value = val); continue; }
+    if (id === '_secondaryColor') { app.setColorValue?.('secondary', val) ?? (app.secondaryEl.value = val); continue; }
     if (id === '_activeBrush') { app.setBrush(val); continue; }
     if (id === '_motionPath') {
       if (val && typeof val === 'object') {

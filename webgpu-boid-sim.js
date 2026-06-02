@@ -105,14 +105,14 @@ function isSupportedByGpu(p) {
 }
 
 export class WebGPUBoidSim {
-  static async create(width, height, maxAgents, wasmPath = './wasm-sim/pkg/boid_sim.js') {
+  static async create(width, height, maxAgents, wasmPath = './wasm-sim/pkg/boid_sim.js', options = {}) {
     const helper = await BoidSim.create(width, height, maxAgents, wasmPath);
-    const sim = new WebGPUBoidSim(width, height, maxAgents, helper);
+    const sim = new WebGPUBoidSim(width, height, maxAgents, helper, options);
     await sim.init();
     return sim;
   }
 
-  constructor(width, height, maxAgents, helper) {
+  constructor(width, height, maxAgents, helper, options = {}) {
     this.width = width;
     this.height = height;
     this.maxAgents = maxAgents;
@@ -128,6 +128,8 @@ export class WebGPUBoidSim {
     this._stagingSlots = [];
     this._lastMode = 'wasm';
     this.ready = false;
+    this._sharedAdapter = options.adapter || null;
+    this._sharedDevice = options.device || null;
     this.adapter = null;
     this.device = null;
     this.pipeline = null;
@@ -152,12 +154,17 @@ export class WebGPUBoidSim {
   }
 
   async init() {
-    if (typeof navigator === 'undefined' || !navigator.gpu) {
+    if (!this._sharedDevice && (typeof navigator === 'undefined' || !navigator.gpu)) {
       throw new Error('WebGPU unavailable');
     }
-    this.adapter = await navigator.gpu.requestAdapter();
-    if (!this.adapter) throw new Error('WebGPU adapter unavailable');
-    this.device = await this.adapter.requestDevice();
+    if (this._sharedDevice) {
+      this.device = this._sharedDevice;
+      this.adapter = this._sharedAdapter;
+    } else {
+      this.adapter = await navigator.gpu.requestAdapter();
+      if (!this.adapter) throw new Error('WebGPU adapter unavailable');
+      this.device = await this.adapter.requestDevice();
+    }
 
     const maxBytes = this.maxAgents * this._stride * BYTES_PER_F32;
     this.agentBuffers = [
@@ -1164,6 +1171,52 @@ fn main(@builtin(global_invocation_id) gid : vec3u) {
 
   get wasm() {
     return this.helper.wasm;
+  }
+
+  destroy() {
+    const destroyBuffer = buffer => {
+      try {
+        buffer?.destroy?.();
+      } catch {}
+    };
+    for (const slot of this._stagingSlots || []) {
+      destroyBuffer(slot?.buffer);
+    }
+    this._stagingSlots = [];
+    for (const buffer of this.agentBuffers || []) {
+      destroyBuffer(buffer);
+    }
+    this.agentBuffers = [];
+    destroyBuffer(this.paramsBuffer);
+    destroyBuffer(this.metaBuffer);
+    destroyBuffer(this.guideMetaBuffer);
+    destroyBuffer(this.pointGuideBuffer);
+    destroyBuffer(this.pathTargetBuffer);
+    destroyBuffer(this.quorumBuffer);
+    this.paramsBuffer = null;
+    this.metaBuffer = null;
+    this.guideMetaBuffer = null;
+    this.pointGuideBuffer = null;
+    this.pathTargetBuffer = null;
+    this.quorumBuffer = null;
+    if (this.sensingTexture) {
+      try {
+        this.sensingTexture.destroy();
+      } catch {}
+    }
+    this.sensingTexture = null;
+    this.sensingTextureView = null;
+    this._sensingTextureWidth = 0;
+    this._sensingTextureHeight = 0;
+    this.bindGroups = [];
+    this.quorumBindGroups = [];
+    this.pipeline = null;
+    this.quorumPipeline = null;
+    this.device = null;
+    this.adapter = null;
+    this.ready = false;
+    this.helper?.destroy?.();
+    this.helper = null;
   }
 
   get mode() {
